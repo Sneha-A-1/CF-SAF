@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+venv/
+*.pkl
+*.pt
+*.h5
+*.csv
+!results/main_results.csv
+!results/ablation/ablation_results.csv
+!results/idcra_classification.csv
+.DS_Store
+*.log

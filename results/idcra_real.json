@@ -1,0 +1,50 @@
+{
+  "theta": 0.22,
+  "fbeta": {
+    "F1": {
+      "theta": 0.22,
+      "precision": 0.837,
+      "recall": 0.938,
+      "fbeta": 0.8847
+    },
+    "F2": {
+      "theta": 0.07,
+      "precision": 0.811,
+      "recall": 0.948,
+      "fbeta": 0.9168
+    },
+    "F3": {
+      "theta": 0.05,
+      "precision": 0.726,
+      "recall": 0.967,
+      "fbeta": 0.9356
+    }
+  },
+  "test": {
+    "class0": {
+      "precision": 0.971,
+      "recall": 0.916,
+      "f1": 0.943,
+      "fnr": 0.084,
+      "n": 5228
+    },
+    "class1": {
+      "precision": 0.831,
+      "recall": 0.938,
+      "f1": 0.881,
+      "fnr": 0.062,
+      "n": 2300
+    },
+    "macro": {
+      "precision": 0.901,
+      "recall": 0.927,
+      "f1": 0.912
+    },
+    "weighted": {
+      "precision": 0.928,
+      "recall": 0.923,
+      "f1": 0.924
+    },
+    "n_test": 7528
+  }
+}

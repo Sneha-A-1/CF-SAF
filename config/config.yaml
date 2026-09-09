@@ -1,0 +1,87 @@
+# =============================================================
+# CF-SAF Configuration — all hyperparameters from the paper
+# =============================================================
+
+seed:
+  numpy: 42
+  torch: 42
+
+dataset:
+  n_tasks: 50000
+  split: [0.70, 0.15, 0.15]        # train / val / test (stratified)
+  urgency:
+    low_mode:  {mu: 0.15, sigma: 0.08, weight: 0.72}
+    high_mode: {mu: 0.82, sigma: 0.07, weight: 0.28}
+  deadline_urgent_s:     [0.5, 600]
+  deadline_nonurgent_s:  [60, 86400]
+  privacy_flag_rate:     0.08
+  payload_range_kb:      [0.04, 2867]
+  cpu_demand_mips:       [100, 8000]
+  mem_demand_mb:         [2, 512]
+  arrival_rate_per_s:    50
+
+idcra:
+  urgency_label_threshold:   0.60    # FAO-56 calibrated
+  deadline_label_threshold_s: 30.0
+  urgency_weights:
+    w1: 0.50                          # threshold breach
+    w2: 0.30                          # source criticality
+    w3: 0.20                          # payload inverse
+  gbt:
+    n_estimators:    100
+    max_depth:       4
+    learning_rate:   0.10
+    subsample:       0.80
+    min_samples_leaf: 5
+  neural:
+    hidden_layers:  [16, 8]
+    activation:     relu
+    output:         sigmoid
+    lr:             0.001
+    weight_decay:   0.0001
+    epochs:         50
+    batch_size:     256
+  eta_cal:          0.50
+  theta_star:       0.47             # selected by F1 maximisation
+
+orsa_f:
+  weights:
+    w_L:   0.50
+    w_E:   0.30
+    w_eta: 0.20
+  psi_thresh:        0.75            # preemption threshold
+  lambda_thresh:     0.80            # rebalancing ceiling
+  eta_max:           0.85            # utilisation stability ceiling
+  rebalancing_interval_ms: 250
+
+fog_nodes:
+  class_A: {count: 2, cpu_mips: 2000,  mem_mb: 4096,
+            latency_ms: 5,  p_dyn: 4.0,  p_idle: 1.2,
+            note: "Raspberry Pi 4 equivalent"}
+  class_B: {count: 3, cpu_mips: 8000,  mem_mb: 8192,
+            latency_ms: 8,  p_dyn: 10.0, p_idle: 3.0,
+            note: "NVIDIA Jetson Nano equivalent"}
+  class_C: {count: 3, cpu_mips: 25000, mem_mb: 16384,
+            latency_ms: 12, p_dyn: 35.0, p_idle: 8.5,
+            note: "Intel NUC equivalent"}
+  class_D: {count: 2, cpu_mips: 60000, mem_mb: 65536,
+            latency_ms: 18, p_dyn: 75.0, p_idle: 18.0,
+            note: "Small rack server"}
+  initial_load_range:   [0.1, 0.4]
+  ff_bandwidth_mbps:    100           # fog-to-fog
+  backhaul_mbps:        50            # fog-to-cloud
+
+cloud:
+  latency_ms:    95
+  p_tx_wan_w:    2.1
+
+energy:
+  p_tx_gateway_w: 0.50
+  p_rx_gateway_w: 0.30
+
+simulation:
+  n_runs:     10
+  alpha:      0.001
+  epoch_s:    1.0
+  framework:  simpy
+  framework_version: "4.0"
