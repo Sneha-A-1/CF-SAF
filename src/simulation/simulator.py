@@ -42,6 +42,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+EPS_PRE_MS = 2.0   # preemption / state-save overhead (ms), Sec. VII-E
+
 CLOUD_RTT_MS = 95.0
 P_TX_W, P_RX_W, P_TX_WAN_W = 0.5, 0.3, 2.1
 B_GF_KBPS = 100_000.0     # gateway->fog, 100 Mbps
@@ -233,13 +235,22 @@ class Simulator:
 
     # -------- dispatch --------
     def _start(self, job: Job, node: Node):
+        # A task resumed after preemption keeps its progress: only the
+        # unexecuted fraction of its work remains, plus the state-save
+        # overhead EPS_PRE_MS (Algorithm 2, "suspend; save state").
+        rem = getattr(job, "rem_frac", 1.0)
         frac = job.cpu / node.cpu_mips
-        exec_ms = job.cpu / max(node.cpu_mips * (1 - node.load), 1e-9) * 1000.0
+        exec_ms = rem * job.cpu / max(node.cpu_mips * (1 - node.load), 1e-9) * 1000.0
+        if getattr(job, "preempted", False) and rem < 1.0:
+            exec_ms += EPS_PRE_MS
         node.load = min(1.0, node.load + frac)
         node.mem_used += job.mem
         job.node = node.node_id
-        job.start_ms = self.t
-        job.exec_ms = exec_ms
+        if job.start_ms < 0:
+            job.start_ms = self.t
+        job.seg_start = self.t
+        job.seg_exec = exec_ms
+        job.exec_ms = getattr(job, "exec_done", 0.0) + exec_ms
         self._running[node.node_id].append(job)
         node.busy_ms += exec_ms
         if self.scheduler == "fuzzydrl":
@@ -303,28 +314,46 @@ class Simulator:
             if not moved:
                 break
 
-    def _try_preempt(self, job: Job) -> bool:
-        if not self.preemption or job.psi < self.psi_thresh:
-            return False
-        victim, vnode = None, None
-        for nid, running in self._running.items():
-            for rt in running:
-                if victim is None or rt.psi < victim.psi:
-                    victim, vnode = rt, self.nodes[nid]
-        if victim is None or job.psi <= victim.psi:
-            return False
-        # suspend victim, return its capacity, requeue it
+    def _suspend(self, victim: Job, vnode: Node):
+        """Suspend a running task: cancel its pending completion event,
+        record its progress, and release its capacity exactly once."""
+        self._events = [e for e in self._events
+                        if not (e[2][0] == "done" and e[2][1] is victim)]
+        heapq.heapify(self._events)
+        seg = max(getattr(victim, "seg_exec", victim.exec_ms), 1e-9)
+        ran = min(max(self.t - getattr(victim, "seg_start", victim.start_ms), 0.0), seg)
+        victim.rem_frac = getattr(victim, "rem_frac", 1.0) * (1.0 - ran / seg)
+        victim.exec_done = getattr(victim, "exec_done", 0.0) + ran
+        vnode.busy_ms -= (seg - ran)
         vnode.load = max(0.0, vnode.load - victim.cpu / vnode.cpu_mips)
         vnode.mem_used = max(0.0, vnode.mem_used - victim.mem)
         self._running[vnode.node_id].remove(victim)
         victim.preempted = True
+
+    def _try_preempt(self, job: Job) -> bool:
+        """Suspend the lowest-priority running task whose suspension makes
+        the arriving task admissible on the same node (Algorithm 2).  If no
+        such task outranks the arrival, nothing is suspended and the caller
+        re-enqueues the arrival (it is never enqueued twice)."""
+        if not self.preemption or job.psi < self.psi_thresh:
+            return False
+        victim, vnode = None, None
+        for nid, running in self._running.items():
+            n = self.nodes[nid]
+            for rt in running:
+                if rt.psi >= job.psi:
+                    continue
+                cpu_ok = n.cpu_mips * max(0.0, 1.0 - n.load) + rt.cpu >= job.cpu
+                mem_ok = n.residual_mem + rt.mem >= job.mem
+                if cpu_ok and mem_ok and (victim is None or rt.psi < victim.psi):
+                    victim, vnode = rt, n
+        if victim is None:
+            return False
+        self._suspend(victim, vnode)
         self._enqueue(victim)
         self.n_preemptions += 1
-        if vnode.admits(job.cpu, job.mem):
-            self._start(job, vnode)
-            return True
-        self._enqueue(job)
-        return False
+        self._start(job, vnode)
+        return True
 
     # -------- rebalancing, Theorem 11 --------
     def _rebalance(self):
